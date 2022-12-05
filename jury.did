@@ -30,7 +30,7 @@ service jury: (opt text) {
   //
   // Certification and operation log commit
   //
-  // Get certificate for the certified data for the staged Block.
+  // Get certificate for the certified data for the staged Block(s).
   // Returns None if nothing is staged.
   get_certificate: () -> (opt blob) query;
   // Commit the staged Block returning None if nothing is staged.
