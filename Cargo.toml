@@ -1,24 +1,28 @@
 [package]
-name = "factland"
+name = "jury"
 version = "0.1.0"
 authors = ["John Plevyak <jplevyak@gmail.com>"]
 edition = "2021"
 
-[lib]
-crate-type = ["cdylib"]
-
-[build-dependencies]
-prost-build = "^0.11.0"
-
 [dependencies]
-candid = "0.7.15"
-hex = "0.4.3"
-ic-cdk = "0.5.2"
-ic-cdk-macros = "0.5.2"
-ic-certified-assets = "0.2.5"
-prost = "^0.11.2"
-prost-types = "^0.11.2"
+candid = "0.8"
+hex = "0.4"
+ic-certified-map = "0.3"
+ic-cdk = "0.6"
+ic-cdk-macros = "0.6"
+ic-stable-structures = "0.3"
+num = "0.4"
+num-traits = "0.2"
+num-derive = "0.3"
+rand = { version ="*", default-features = false }
+rand_core = { version = "*", default-features = false }
+rand_chacha = { version = "*", default-features = false }
 serde = "1"
 serde_bytes = "0.11"
 serde_cbor = "0.11"
-sha2 = "0.10.6"
+sha2 = "0.10"
+
+[profile.release]
+debug = false
+lto = true
+opt-level = 'z'
