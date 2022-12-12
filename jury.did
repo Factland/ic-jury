@@ -1,4 +1,4 @@
-type Kind = { Add; Remove; Jury; Expand; }
+type Kind = { Add; Remove; Select; Expand; }
 type Data = record {
   kind: Kind;
   jurors: vec blob;
@@ -23,9 +23,9 @@ service jury: (opt text) {
   // Stage a Remove and return the future log index.
   remove: (jurors: vec blob) -> (nat32);
   // Stage a Jury Block and return the future log index.
-  select: (index: nat32, len: nat32) -> (nat32);
+  select: (index: nat32, count: nat32) -> (nat32);
   // Stage an Expand Block and return the future log index.
-  expand: (index: nat32, len: nat32) -> (nat32);
+  expand: (index: nat32, more: nat32) -> (nat32);
 
   //
   // Certification and operation log commit
@@ -41,16 +41,18 @@ service jury: (opt text) {
   //
   // Return the size of the set of jurors at a log index.
   get_size: (index: nat32) -> (nat32) query;
-  // Return the current log index.
+  // Return the current log index including any pending Block(s).
   get_index: () -> (nat32) query;
-  // Get a block.
+  // Return the number of pending Block(s).
+  get_pending: () -> (nat32) query;
+  // Get a Block.
   get_block: (index: nat32) -> (Block) query;
   // Return the juror's merkle tree root hash at a log index.
   root_hash: (index: nat32) -> (blob) query;
   // Return a span of jurors (merkel tree leaves) at a log index.
   get_jurors: (index: nat32, start: nat32, len: nat32) -> (vec blob) query;
-  // Find the index of the juror in the merkel tree leaves at a log index.
-  find: (index: nat32, juror: blob) -> (opt nat32) query;
+  // Find the indexes of the jurors in the merkel tree leaves at a log index.
+  find: (index: nat32, juror: vec blob) -> (vec opt nat32) query;
   // Return a proof for a vec of juror indexes (left to right, bottom to top hashes) at a log index.
   proof: (index: nat32, jurors: vec nat32) -> (vec blob) query;
 

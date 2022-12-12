@@ -10,7 +10,7 @@ use num::FromPrimitive;
 use rand_core::{RngCore, SeedableRng};
 use sha2::{Digest, Sha256};
 use std::cell::RefCell;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::fmt::Debug;
 #[macro_use]
 extern crate num_derive;
@@ -27,7 +27,7 @@ enum Kind {
     #[default]
     Add,
     Remove,
-    Jury,
+    Select,
     Expand,
 }
 
@@ -77,14 +77,65 @@ thread_local! {
             )
         );
     static PENDING_DATA: RefCell<PendingData> = RefCell::new(PendingData::default());
-    static PREVIOUS_HASH: RefCell<[u8; 32]> = RefCell::new(<[u8; 32]>::default());
+    static PREVIOUS_HASH: RefCell<Hash> = RefCell::new(<Hash>::default());
+    // Map from juror to history: add index, (delete index, (add index ...))
+    static TREE: RefCell<RbTree<Blob, Vec<u32>>> = RefCell::new(RbTree::new());
 }
 
 fn set_certificate(blocks: &Vec<Data>) -> Blob {
-    let hash: [u8; 32] = sha2::Sha256::digest(Encode!(blocks).unwrap()).into();
-    let certified_data: &[u8; 32] = &ic_certified_map::labeled_hash(b"jury_block", &hash);
+    let hash: Hash = sha2::Sha256::digest(Encode!(blocks).unwrap()).into();
+    let certified_data: &Hash = &ic_certified_map::labeled_hash(b"jury_block", &hash);
     ic_cdk::api::set_certified_data(certified_data);
     certified_data.to_vec()
+}
+
+#[ic_cdk_macros::update]
+#[candid_method]
+fn add(new_jurors: Vec<Blob>) -> u32 {
+    let mut new_data = Data::default();
+    new_data.kind = Kind::Add;
+    new_data.jurors = new_jurors;
+    PENDING_DATA.with(|d| d.borrow_mut().push(new_data));
+    get_index()
+}
+
+#[ic_cdk_macros::update]
+#[candid_method]
+fn remove(new_jurors: Vec<Blob>) -> u32 {
+    let mut new_data = Data::default();
+    new_data.kind = Kind::Remove;
+    new_data.jurors = new_jurors;
+    PENDING_DATA.with(|d| d.borrow_mut().push(new_data));
+    // let remove = HashSet::from_iter(new_jurors);
+    // PENDING_DATA.with(|d| d.borrow_mut().jurors.retain(|e| !remove.contains(e)));
+    get_index()
+}
+
+#[ic_cdk_macros::update]
+#[candid_method]
+async fn select(index: u32, count: u32) -> u32 {
+    let mut new_data = Data::default();
+    new_data.kind = Kind::Select;
+    let seed = get_rng_seed().await;
+    new_data.rand = seed.to_vec();
+    let rng = make_rng(seed);
+    // new_data.jurors = new_jurors;
+    PENDING_DATA.with(|d| d.borrow_mut().push(new_data));
+    get_index()
+}
+
+#[ic_cdk_macros::update]
+#[candid_method]
+fn expand(index: u32, count: u32) -> u32 {
+    let mut new_data = Data::default();
+    new_data.kind = Kind::Expand;
+    let seed = get_block(index).data.rand;
+    new_data.rand = seed.to_vec();
+    let seed: Hash = seed.try_into().unwrap();
+    let rng = make_rng(seed);
+    // new_data.jurors = new_jurors;
+    PENDING_DATA.with(|d| d.borrow_mut().push(new_data));
+    get_index()
 }
 
 #[ic_cdk_macros::query]
@@ -99,8 +150,35 @@ fn get_certificate() -> Option<Blob> {
 
 #[ic_cdk_macros::query]
 #[candid_method]
+fn get_size(index: u32) -> u32 {
+    LOG.with(|m| {
+        let block: Block = candid::decode_one(&m.borrow().get(index as usize).unwrap()).unwrap();
+        block.data.jurors.len() as u32
+    })
+}
+
+#[ic_cdk_macros::query]
+#[candid_method]
+fn get_index() -> u32 {
+    (LOG.with(|l| l.borrow().len()) + PENDING_DATA.with(|d| d.borrow().len())) as u32
+}
+
+#[ic_cdk_macros::query]
+#[candid_method]
+fn get_pending() -> u32 {
+    PENDING_DATA.with(|d| d.borrow().len()) as u32
+}
+
+#[ic_cdk_macros::query]
+#[candid_method]
 fn get_block(index: u32) -> Block {
     LOG.with(|m| candid::decode_one(&m.borrow().get(index as usize).unwrap()).unwrap())
+}
+
+#[ic_cdk_macros::query]
+#[candid_method]
+fn get_jurors(index: u32) -> Vec<Blob> {
+    get_block(index).data.jurors
 }
 
 #[ic_cdk_macros::query]
@@ -156,24 +234,39 @@ fn is_authorized() -> Result<(), String> {
     })
 }
 
-async fn make_rng() -> rand_chacha::ChaCha20Rng {
+async fn get_rng_seed() -> Hash {
     let raw_rand: Vec<u8> =
         match ic_cdk::call(Principal::management_canister(), "raw_rand", ()).await {
             Ok((res,)) => res,
             Err((_, err)) => ic_cdk::trap(&format!("failed to get seed: {}", err)),
         };
-    let seed: [u8; 32] = raw_rand[..].try_into().unwrap_or_else(|_| {
+    let seed: Hash = raw_rand[..].try_into().unwrap_or_else(|_| {
         ic_cdk::trap(&format!(
                 "when creating seed from raw_rand output, expected raw randomness to be of length 32, got {}",
                 raw_rand.len()
                 ));
     });
+    seed
+}
+
+fn make_rng(seed: Hash) -> rand_chacha::ChaCha20Rng {
     rand_chacha::ChaCha20Rng::from_seed(seed)
 }
 
 #[ic_cdk_macros::init]
 fn canister_init(previous_hash: Option<String>) {
     authorize_principal(&ic_cdk::caller());
+    if let Some(previous_hash) = previous_hash {
+        if let Ok(previous_hash) = hex::decode(&previous_hash) {
+            if previous_hash.len() == 32 {
+                PREVIOUS_HASH.with(|h| {
+                    let hash: Hash = previous_hash.try_into().unwrap();
+                    *h.borrow_mut() = hash;
+                });
+                return;
+            }
+        }
+    }
 }
 
 #[ic_cdk_macros::post_upgrade]
