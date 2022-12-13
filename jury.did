@@ -1,4 +1,4 @@
-type Kind = { Add; Remove; Select; Expand; }
+type Kind = variant { Add; Remove; Select; Expand; };
 type Data = record {
   kind: Kind;
   jurors: vec blob;
@@ -14,7 +14,7 @@ type Block = record {
   previous_hash: blob;
 };
 
-service jury: (opt text) {
+service jury: (opt text) -> {
   //
   // Juror pool and jury operations
   //
