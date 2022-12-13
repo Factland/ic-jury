@@ -14,7 +14,7 @@ ic-stable-structures = "0.3"
 num = "0.4"
 num-traits = "0.2"
 num-derive = "0.3"
-rand = { version ="*", default-features = false }
+rand = { version ="*", default-features = false, features=["alloc"] }
 rand_core = { version = "*", default-features = false }
 rand_chacha = { version = "*", default-features = false }
 serde = "1"

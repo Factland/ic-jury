@@ -25,6 +25,7 @@ service jury: (opt text) {
   // Stage a Jury Block and return the future log index.
   select: (index: nat32, count: nat32) -> (nat32);
   // Stage an Expand Block and return the future log index.
+  // The selected jury uses the same random number as the given 'index'.
   expand: (index: nat32, more: nat32) -> (nat32);
 
   //
