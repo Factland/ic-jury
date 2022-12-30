@@ -1,13 +1,16 @@
 use candid::{CandidType, Decode, Deserialize, Encode, Principal};
+use hash_tree::{HashTree, LookupResult};
 use ic_cdk::export::candid::candid_method;
-use ic_certified_map::{Hash, RbTree};
+use ic_certified_map::{AsHashTree, Hash, RbTree};
 use ic_stable_structures::memory_manager::{MemoryId, MemoryManager, VirtualMemory};
 use ic_stable_structures::{
     cell::Cell as StableCell, log::Log, DefaultMemoryImpl, StableBTreeMap, Storable,
 };
 use rand::seq::SliceRandom;
 use rand_core::SeedableRng;
+use serde::Serialize;
 use sha2::Digest;
+use std::collections::HashMap;
 use std::fmt::Debug;
 use std::{borrow::Cow, cell::RefCell};
 #[macro_use]
@@ -19,6 +22,7 @@ type Memory = VirtualMemory<DefaultMemoryImpl>;
 type Blob = Vec<u8>;
 type History = Vec<u32>;
 type PoolTree = RbTree<Blob, Blob>;
+type BlockTree = RbTree<Blob, Hash>;
 
 const MAX_KEY_SIZE: u32 = 32;
 const MAX_HISTORY: usize = 8;
@@ -36,7 +40,7 @@ enum Kind {
 struct Data {
     kind: Kind,
     jurors: Vec<Blob>,
-    rand: Blob,
+    rand: Option<Blob>,
     jurors_index: u32,
 }
 
@@ -45,7 +49,7 @@ struct Block {
     certificate: Blob,
     tree: Blob,
     data: Data,
-    previous_hash: Blob,
+    previous_hash: Hash,
 }
 
 #[derive(Clone, Debug, CandidType, Deserialize, FromPrimitive)]
@@ -64,6 +68,13 @@ struct StoreHash(Hash);
 
 #[derive(Clone, Debug, Default, CandidType, Deserialize)]
 struct StoreData(Vec<Data>);
+
+#[allow(dead_code)]
+#[derive(Deserialize)]
+struct ReplicaCertificate {
+    tree: HashTree<'static>,
+    signature: serde_bytes::ByteBuf,
+}
 
 impl Storable for StoreHash {
     fn to_bytes(&self) -> std::borrow::Cow<[u8]> {
@@ -111,8 +122,10 @@ thread_local! {
     static TREE: RefCell<PoolTree> = RefCell::new(RbTree::new());
 }
 
-fn set_certificate(blocks: &Vec<Data>) -> Blob {
-    let hash: Hash = sha2::Sha256::digest(Encode!(blocks).unwrap()).into();
+fn set_certificate() -> Blob {
+    let data = PENDING_DATA.with(|d| take_cell(&mut d.borrow_mut()).0);
+    let previous_hash = get_previous_hash();
+    let hash = build_tree(&data, &previous_hash).root_hash();
     let certified_data: &Hash = &ic_certified_map::labeled_hash(b"jury_block", &hash);
     ic_cdk::api::set_certified_data(certified_data);
     certified_data.to_vec()
@@ -147,7 +160,8 @@ fn add(new_jurors: Vec<Blob>) -> u32 {
     new_data.kind = Kind::Add;
     new_data.jurors = new_jurors.clone();
     push_pending(&new_data);
-    let index = get_index();
+    let index = length() - 1;
+    set_certificate();
     TREE.with(|t| {
         let mut t = t.borrow_mut();
         for j in new_jurors {
@@ -169,6 +183,7 @@ fn add(new_jurors: Vec<Blob>) -> u32 {
             }
         }
     });
+    set_certificate();
     index
 }
 
@@ -179,7 +194,7 @@ fn remove(remove_jurors: Vec<Blob>) -> u32 {
     new_data.kind = Kind::Remove;
     new_data.jurors = remove_jurors.clone();
     push_pending(&new_data);
-    let index = get_index();
+    let index = length() - 1;
     TREE.with(|t| {
         let mut t = t.borrow_mut();
         for j in remove_jurors {
@@ -192,6 +207,7 @@ fn remove(remove_jurors: Vec<Blob>) -> u32 {
             }
         }
     });
+    set_certificate();
     index
 }
 
@@ -239,10 +255,11 @@ async fn select(index: u32, count: u32) -> u32 {
     let mut new_data = Data::default();
     new_data.kind = Kind::Select;
     let seed = get_rng_seed().await;
-    new_data.rand = seed.to_vec();
+    new_data.rand = Some(seed.to_vec());
     new_data.jurors = make_jury(index, count, seed);
     push_pending(&new_data);
-    get_index()
+    set_certificate();
+    length()
 }
 
 #[ic_cdk_macros::update(guard = "is_authorized")]
@@ -252,11 +269,12 @@ fn expand(index: u32, count: u32) -> u32 {
     new_data.kind = Kind::Expand;
     let old = get_block(index);
     new_data.rand = old.data.rand.clone();
-    let seed: Hash = old.data.rand.try_into().unwrap();
+    let seed: Hash = old.data.rand.unwrap().try_into().unwrap();
     let old_count = old.data.jurors.len() as u32;
     new_data.jurors = make_jury(index, old_count + count, seed)[old_count as usize..].to_vec();
     push_pending(&new_data);
-    get_index()
+    set_certificate();
+    length()
 }
 
 #[ic_cdk_macros::query]
@@ -290,20 +308,25 @@ fn get_previous_hash() -> Hash {
     previous_hash
 }
 
-/*
-fn build_tree(data: &Data, previous_hash: &Hash) -> PoolTree {
-    let mut tree = PoolTree::default();
+fn build_tree(data: &Vec<Data>, previous_hash: &Hash) -> BlockTree {
+    let mut tree = BlockTree::default();
+    let offset = length() as u32;
     for (i, d) in data.iter().enumerate() {
-        let hash: [u8; 32] = sha2::Sha256::digest(d).into();
+        let hash: [u8; 32] = sha2::Sha256::digest(Encode!(d).unwrap()).into();
+        let i = (i as u32) + offset;
         tree.insert(i.to_be_bytes().to_vec(), hash); // For lexigraphic order.
     }
     tree.insert("previous_hash".as_bytes().to_vec(), *previous_hash); // For lexigraphic order.
+    tree.insert(
+        "pool_hash".as_bytes().to_vec(),
+        TREE.with(|t| t.borrow().root_hash()),
+    );
     tree
 }
 
 #[ic_cdk_macros::update(guard = "is_authorized")]
 #[candid_method]
-fn commit(certificate: Blob) -> Option<u64> {
+fn commit(certificate: Blob) -> Option<u32> {
     let data = PENDING_DATA.with(|d| take_cell(&mut d.borrow_mut()).0);
     if data.len() == 0 {
         return None;
@@ -313,7 +336,7 @@ fn commit(certificate: Blob) -> Option<u64> {
     // Check that the certificate corresponds to our tree.  Note: we are
     // not fully verifying the certificate, just checking for races.
     let root_hash = tree.root_hash();
-    let certified_data = &ic_certified_map::labeled_hash(b"certified_blocks", &root_hash);
+    let certified_data = &ic_certified_map::labeled_hash(b"jury_blocks", &root_hash);
     let cert: ReplicaCertificate = serde_cbor::from_slice(&certificate[..]).unwrap();
     let canister_id = ic_cdk::api::id();
     let canister_id = canister_id.as_slice();
@@ -326,46 +349,39 @@ fn commit(certificate: Blob) -> Option<u64> {
     } else {
         ic_cdk::trap("certificate mismatch");
     }
-    let index = LOG.with(|l| l.borrow().len());
-    MAP.with(|m| {
-        let mut m = m.borrow_mut();
-        for (_, h) in tree.iter() {
-            m.insert(StoreHash(*h), index as u64).unwrap();
-        }
-        let hash = sha2::Sha256::digest(Encode!(&data).unwrap()).into();
-        m.insert(StoreHash(hash), index as u64).unwrap();
-    });
     LOG.with(|l| {
         let l = l.borrow_mut();
-        let hash_tree = ic_certified_map::labeled(b"certified_blocks", tree.as_hash_tree());
+        let hash_tree = ic_certified_map::labeled(b"jury_blocks", tree.as_hash_tree());
         let mut serializer = serde_cbor::ser::Serializer::new(vec![]);
         serializer.self_describe().unwrap();
         hash_tree.serialize(&mut serializer).unwrap();
-        let block = Block {
-            certificate,
-            tree: serializer.into_inner(),
-            data,
-            previous_hash,
-        };
-        let encoded_block = Encode!(&block).unwrap();
-        l.append(&encoded_block).unwrap();
-        Some(l.len() as u64 - 1)
-    })
+        let tree: Blob = serializer.into_inner();
+        for d in data {
+            let block = Block {
+                certificate: certificate.clone(),
+                tree: tree.clone(),
+                data: d,
+                previous_hash,
+            };
+            let encoded_block = Encode!(&block).unwrap();
+            l.append(&encoded_block).unwrap();
+        }
+    });
+    Some(length())
 }
-*/
 
 #[ic_cdk_macros::query]
 #[candid_method]
 fn get_size(index: u32) -> u32 {
-    LOG.with(|m| {
-        let block: Block = candid::decode_one(&m.borrow().get(index as usize).unwrap()).unwrap();
+    LOG.with(|l| {
+        let block: Block = candid::decode_one(&l.borrow().get(index as usize).unwrap()).unwrap();
         block.data.jurors.len() as u32
     })
 }
 
 #[ic_cdk_macros::query]
 #[candid_method]
-fn get_index() -> u32 {
+fn length() -> u32 {
     (LOG.with(|l| l.borrow().len()) + PENDING_DATA.with(|d| d.borrow().get().0.len())) as u32
 }
 
@@ -378,13 +394,47 @@ fn get_pending() -> u32 {
 #[ic_cdk_macros::query]
 #[candid_method]
 fn get_block(index: u32) -> Block {
-    LOG.with(|m| candid::decode_one(&m.borrow().get(index as usize).unwrap()).unwrap())
+    LOG.with(|l| {
+        let committed = l.borrow().len() as u32;
+        if index < committed {
+            return candid::decode_one(&l.borrow().get(index as usize).unwrap()).unwrap();
+        }
+        let offset = index - committed;
+        let mut b = Block::default();
+        b.data = PENDING_DATA.with(|d| {
+            d.borrow()
+                .get()
+                .0
+                .get((index - offset) as usize)
+                .unwrap()
+                .clone()
+        });
+        b
+    })
 }
 
 #[ic_cdk_macros::query]
 #[candid_method]
 fn get_jurors(index: u32) -> Vec<Blob> {
     get_block(index).data.jurors
+}
+
+#[ic_cdk_macros::query]
+#[candid_method]
+fn find(index: u32, jurors: Vec<Blob>) -> Vec<Option<u32>> {
+    let pool = collect_pool(index);
+    let mut m: HashMap<Blob, u32> = HashMap::new();
+    for (i, j) in jurors.iter().enumerate() {
+        m.insert(j.clone(), i as u32);
+    }
+    let mut result: Vec<Option<u32>> = Vec::new();
+    result.resize(jurors.len(), None);
+    for (i, j) in pool.iter().enumerate() {
+        if let Some(k) = m.get(j) {
+            result[*k as usize] = Some(i as u32);
+        }
+    }
+    result
 }
 
 #[ic_cdk_macros::query]
@@ -467,7 +517,7 @@ fn canister_init(previous_hash: Option<String>) {
             if previous_hash.len() == 32 {
                 PREVIOUS_HASH.with(|h| {
                     let hash: Hash = previous_hash.try_into().unwrap();
-                    h.borrow_mut().set(StoreHash(hash));
+                    h.borrow_mut().set(StoreHash(hash)).unwrap();
                 });
                 return;
             }
