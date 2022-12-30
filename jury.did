@@ -42,14 +42,16 @@ service jury: (opt text) -> {
   //
   // Return length of the log index including any pending Block(s).
   length: () -> (nat32) query;
-  // Return the size of the set of jurors at a log index.
+  // Return the size of the pool of jurors at a log index.
+  get_pool_size: (index: nat32) -> (nat32) query;
+  // Return the size of the set of jurors (i.e. added, removed, select or extend) at a log index.
   get_size: (index: nat32) -> (nat32) query;
   // Return the number of pending Block(s).
   get_pending: () -> (nat32) query;
   // Get a Block.
   get_block: (index: nat32) -> (Block) query;
-  // Return a span of jurors (merkel tree leaves) at a log index.
-  get_jurors: (index: nat32, start: nat32, len: nat32) -> (vec blob) query;
+  // Return set of jurors (i.e. added, removed, select or extend) at a log index.
+  get_jurors: (index: nat32) -> (vec blob) query;
   // Find the indexes of the jurors in the merkel tree leaves at a log index.
   find: (index: nat32, jurors: vec blob) -> (vec opt nat32) query;
   // Return a proof for a vec of juror indexes (left to right, bottom to top hashes) at a log index.

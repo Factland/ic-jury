@@ -123,10 +123,10 @@ thread_local! {
 }
 
 fn set_certificate() -> Blob {
-    let data = PENDING_DATA.with(|d| take_cell(&mut d.borrow_mut()).0);
+    let data = PENDING_DATA.with(|d| d.borrow().get().0.clone());
     let previous_hash = get_previous_hash();
     let hash = build_tree(&data, &previous_hash).root_hash();
-    let certified_data: &Hash = &ic_certified_map::labeled_hash(b"jury_block", &hash);
+    let certified_data = &ic_certified_map::labeled_hash(b"jury_blocks", &hash);
     ic_cdk::api::set_certified_data(certified_data);
     certified_data.to_vec()
 }
@@ -161,7 +161,6 @@ fn add(new_jurors: Vec<Blob>) -> u32 {
     new_data.jurors = new_jurors.clone();
     push_pending(&new_data);
     let index = length() - 1;
-    set_certificate();
     TREE.with(|t| {
         let mut t = t.borrow_mut();
         for j in new_jurors {
@@ -179,7 +178,7 @@ fn add(new_jurors: Vec<Blob>) -> u32 {
                     t.insert(j, from_history(&history));
                 }
             } else {
-                t.insert(j, from_history(&vec![index; 1]));
+                t.insert(j, from_history(&vec![index]));
             }
         }
     });
@@ -220,7 +219,7 @@ fn collect_pool(index: u32) -> Vec<Blob> {
             let mut found = false;
             if history.len() % 2 == 1 {
                 // simple case: juror is currently active
-                if history[history.len() - 1] >= index {
+                if history[history.len() - 1] >= index - 1 {
                     pool.push(k.to_vec());
                     found = true;
                 }
@@ -287,15 +286,6 @@ fn get_certificate() -> Option<Blob> {
     }
 }
 
-fn take_cell<T>(c: &mut StableCell<T, Memory>) -> T
-where
-    T: Clone + Default + Storable,
-{
-    let v = c.get().clone();
-    c.set(T::default()).unwrap();
-    v
-}
-
 fn get_previous_hash() -> Hash {
     let mut previous_hash = PREVIOUS_HASH.with(|h| h.borrow().get().0.clone());
     LOG.with(|l| {
@@ -327,16 +317,15 @@ fn build_tree(data: &Vec<Data>, previous_hash: &Hash) -> BlockTree {
 #[ic_cdk_macros::update(guard = "is_authorized")]
 #[candid_method]
 fn commit(certificate: Blob) -> Option<u32> {
-    let data = PENDING_DATA.with(|d| take_cell(&mut d.borrow_mut()).0);
+    let data = PENDING_DATA.with(|d| d.borrow().get().0.clone());
     if data.len() == 0 {
         return None;
     }
     let previous_hash = get_previous_hash();
-    let tree = build_tree(&data, &previous_hash);
     // Check that the certificate corresponds to our tree.  Note: we are
     // not fully verifying the certificate, just checking for races.
-    let root_hash = tree.root_hash();
-    let certified_data = &ic_certified_map::labeled_hash(b"jury_blocks", &root_hash);
+    let tree = build_tree(&data, &previous_hash);
+    let certified_data = &ic_certified_map::labeled_hash(b"jury_blocks", &tree.root_hash());
     let cert: ReplicaCertificate = serde_cbor::from_slice(&certificate[..]).unwrap();
     let canister_id = ic_cdk::api::id();
     let canister_id = canister_id.as_slice();
@@ -367,16 +356,20 @@ fn commit(certificate: Blob) -> Option<u32> {
             l.append(&encoded_block).unwrap();
         }
     });
+    PENDING_DATA.with(|d| d.borrow_mut().set(StoreData::default()).unwrap());
     Some(length())
 }
 
 #[ic_cdk_macros::query]
 #[candid_method]
 fn get_size(index: u32) -> u32 {
-    LOG.with(|l| {
-        let block: Block = candid::decode_one(&l.borrow().get(index as usize).unwrap()).unwrap();
-        block.data.jurors.len() as u32
-    })
+    get_block(index).data.jurors.len() as u32
+}
+
+#[ic_cdk_macros::query]
+#[candid_method]
+fn get_pool_size(index: u32) -> u32 {
+    collect_pool(index).len() as u32
 }
 
 #[ic_cdk_macros::query]
@@ -399,13 +392,12 @@ fn get_block(index: u32) -> Block {
         if index < committed {
             return candid::decode_one(&l.borrow().get(index as usize).unwrap()).unwrap();
         }
-        let offset = index - committed;
         let mut b = Block::default();
         b.data = PENDING_DATA.with(|d| {
             d.borrow()
                 .get()
                 .0
-                .get((index - offset) as usize)
+                .get((index - committed) as usize)
                 .unwrap()
                 .clone()
         });

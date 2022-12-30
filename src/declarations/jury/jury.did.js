@@ -32,11 +32,12 @@ export const idlFactory = ({ IDL }) => {
     'get_block' : IDL.Func([IDL.Nat32], [Block], ['query']),
     'get_certificate' : IDL.Func([], [IDL.Opt(IDL.Vec(IDL.Nat8))], ['query']),
     'get_jurors' : IDL.Func(
-        [IDL.Nat32, IDL.Nat32, IDL.Nat32],
+        [IDL.Nat32],
         [IDL.Vec(IDL.Vec(IDL.Nat8))],
         ['query'],
       ),
     'get_pending' : IDL.Func([], [IDL.Nat32], ['query']),
+    'get_pool_size' : IDL.Func([IDL.Nat32], [IDL.Nat32], ['query']),
     'get_size' : IDL.Func([IDL.Nat32], [IDL.Nat32], ['query']),
     'length' : IDL.Func([], [IDL.Nat32], ['query']),
     'proof' : IDL.Func(
