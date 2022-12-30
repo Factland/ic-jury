@@ -31,7 +31,6 @@ export const idlFactory = ({ IDL }) => {
     'get_authorized' : IDL.Func([], [IDL.Vec(IDL.Principal)], ['query']),
     'get_block' : IDL.Func([IDL.Nat32], [Block], ['query']),
     'get_certificate' : IDL.Func([], [IDL.Opt(IDL.Vec(IDL.Nat8))], ['query']),
-    'get_index' : IDL.Func([], [IDL.Nat32], ['query']),
     'get_jurors' : IDL.Func(
         [IDL.Nat32, IDL.Nat32, IDL.Nat32],
         [IDL.Vec(IDL.Vec(IDL.Nat8))],
@@ -39,6 +38,7 @@ export const idlFactory = ({ IDL }) => {
       ),
     'get_pending' : IDL.Func([], [IDL.Nat32], ['query']),
     'get_size' : IDL.Func([IDL.Nat32], [IDL.Nat32], ['query']),
+    'length' : IDL.Func([], [IDL.Nat32], ['query']),
     'proof' : IDL.Func(
         [IDL.Nat32, IDL.Vec(IDL.Nat32)],
         [IDL.Vec(IDL.Vec(IDL.Nat8))],
