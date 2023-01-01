@@ -52,6 +52,7 @@ function uint8ArrayToString(a) {
 function dataToHex(data) {
   let d = { ...data };
   d.jurors = data.jurors.map(uint8ArrayToString);
+  d.memo = uint8ArrayToString(data.memo);
   return d;
 }
 
@@ -128,7 +129,7 @@ let juror2 = encoder.encode("juror 2");
 let juror3 = encoder.encode("juror 3");
 let add_jurors = [juror1, juror2, juror3];
 
-let index = await actor.add(add_jurors);
+let index = await actor.add(add_jurors, encoder.encode("add"));
 console.log('add block number', index);
 
 console.log('blockchain length', await actor.length());
@@ -141,33 +142,33 @@ console.log("pool size at index", index, pool_size);
 let pool = await actor.get_pool(index, 0, pool_size);
 console.log("pool at index", index, pool.map(uint8ArrayToString));
 
-index = await actor.select(index, 1);
+index = await actor.select(index, 1, encoder.encode("1"));
 let jurors = await actor.get_jurors(index);
 console.log("select 1", jurors.map(uint8ArrayToString));
 
-index = await actor.expand(index, 2);
+index = await actor.expand(index, 2, encoder.encode("expand"));
 jurors = await actor.get_jurors(index);
 console.log("expand 2", jurors.map(uint8ArrayToString));
 
-index = await actor.select(index, 2);
+index = await actor.select(index, 2, encoder.encode("2"));
 jurors = await actor.get_jurors(index);
 console.log("select 2", jurors.map(uint8ArrayToString));
 
-index = await actor.select(index, 3);
+index = await actor.select(index, 3, encoder.encode("3"));
 jurors = await actor.get_jurors(index);
 console.log("select 3", jurors.map(uint8ArrayToString));
 
-index = await actor.remove([juror2])
+index = await actor.remove([juror2], encoder.encode("remove"));
 console.log('remove block number', index);
 console.log('blockchain length', await actor.length());
 console.log('get pending', await actor.get_pending());
 block = await actor.get_block(index);
 console.log('get block from index', index, blockToHex(block));
 
-index = await actor.select(index, 1);
+index = await actor.select(index, 1, encoder.encode("1"));
 jurors = await actor.get_jurors(index);
 console.log("select 1", jurors.map(uint8ArrayToString));
-index = await actor.select(index, 2);
+index = await actor.select(index, 2, encoder.encode("2"));
 jurors = await actor.get_jurors(index);
 console.log("select 2", jurors.map(uint8ArrayToString));
 

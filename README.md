@@ -13,8 +13,9 @@ type Kind = variant { Add; Remove; Select; Expand; };
 type Data = record {
   kind: Kind;
   jurors: vec blob;
-  rand: opt blob; // Only present for Jury/Expand.
-  jurors_index: nat32; // Only used for Jury/Expand.
+  rand: opt blob; // Only present for Select/Expand.
+  jurors_index: nat32; // Only used for Select/Expand.
+  memo: blob;
 };
 type Block = record {
   // Certificate is signed by the NNS root key and contains the root of tree.
@@ -35,14 +36,14 @@ service jury: (opt text) -> {
   // Juror pool and jury operations
   //
   // Stage an Add Block and return the future log index.
-  add: (jurors: vec blob) -> (nat32);
+  add: (jurors: vec blob, memo: blob) -> (nat32);
   // Stage a Remove and return the future log index.
-  remove: (jurors: vec blob) -> (nat32);
+  remove: (jurors: vec blob, memo: blob) -> (nat32);
   // Stage a Jury Block and return the future log index.
-  select: (index: nat32, count: nat32) -> (nat32);
+  select: (index: nat32, count: nat32, memo: blob) -> (nat32);
   // Stage an Expand Block and return the future log index.
   // The selected jury uses the same random number as the given 'index'.
-  expand: (index: nat32, more: nat32) -> (nat32);
+  expand: (index: nat32, more: nat32, memo: blob) -> (nat32);
 
   //
   // Certification and operation log commit
@@ -93,6 +94,10 @@ First blocks are staged by calling `add()` `remove()`, `select()` or `extend()` 
 ## Blockchain Persistence
 
 The canister smart contract stores all persistent data in stable memory.  There is no provision for deleting or rewriting blocks short of reinstalling or deleting the canister.  However, because the blocks are certified, they can be backed up remotely and validated offline.  The blocks can even be transfered to a different canister smart contract by re-storing the blocks and substituting the original certificate during the `commit()` phase.
+
+## Selection Cost
+
+The algorithm used for jury selection (sample with rejection) has poor perfomance for pool size P and sample size S, when S is large and S nearly P (e.g. more than P/2).  This situation should be avoided.  The expectation is that P will generally be more than twice as large as S at which point the cost is essentially linear in S.
 
 ## Usage
 

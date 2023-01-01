@@ -11,6 +11,7 @@ export interface Data {
   'jurors' : Array<Uint8Array>,
   'jurors_index' : number,
   'kind' : Kind,
+  'memo' : Uint8Array,
   'rand' : [] | [Uint8Array],
 }
 export type Kind = { 'Add' : null } |
@@ -18,11 +19,11 @@ export type Kind = { 'Add' : null } |
   { 'Select' : null } |
   { 'Expand' : null };
 export interface _SERVICE {
-  'add' : ActorMethod<[Array<Uint8Array>], number>,
+  'add' : ActorMethod<[Array<Uint8Array>, Uint8Array], number>,
   'authorize' : ActorMethod<[Principal], undefined>,
   'commit' : ActorMethod<[Uint8Array], [] | [number]>,
   'deauthorize' : ActorMethod<[Principal], undefined>,
-  'expand' : ActorMethod<[number, number], number>,
+  'expand' : ActorMethod<[number, number, Uint8Array], number>,
   'find' : ActorMethod<[number, Array<Uint8Array>], Array<[] | [number]>>,
   'get_authorized' : ActorMethod<[], Array<Principal>>,
   'get_block' : ActorMethod<[number], Block>,
@@ -33,6 +34,6 @@ export interface _SERVICE {
   'get_pool_size' : ActorMethod<[number], number>,
   'get_size' : ActorMethod<[number], number>,
   'length' : ActorMethod<[], number>,
-  'remove' : ActorMethod<[Array<Uint8Array>], number>,
-  'select' : ActorMethod<[number, number], number>,
+  'remove' : ActorMethod<[Array<Uint8Array>, Uint8Array], number>,
+  'select' : ActorMethod<[number, number, Uint8Array], number>,
 }

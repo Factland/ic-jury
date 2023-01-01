@@ -9,6 +9,7 @@ export const idlFactory = ({ IDL }) => {
     'jurors' : IDL.Vec(IDL.Vec(IDL.Nat8)),
     'jurors_index' : IDL.Nat32,
     'kind' : Kind,
+    'memo' : IDL.Vec(IDL.Nat8),
     'rand' : IDL.Opt(IDL.Vec(IDL.Nat8)),
   });
   const Block = IDL.Record({
@@ -18,11 +19,19 @@ export const idlFactory = ({ IDL }) => {
     'previous_hash' : IDL.Vec(IDL.Nat8),
   });
   return IDL.Service({
-    'add' : IDL.Func([IDL.Vec(IDL.Vec(IDL.Nat8))], [IDL.Nat32], []),
+    'add' : IDL.Func(
+        [IDL.Vec(IDL.Vec(IDL.Nat8)), IDL.Vec(IDL.Nat8)],
+        [IDL.Nat32],
+        [],
+      ),
     'authorize' : IDL.Func([IDL.Principal], [], []),
     'commit' : IDL.Func([IDL.Vec(IDL.Nat8)], [IDL.Opt(IDL.Nat32)], []),
     'deauthorize' : IDL.Func([IDL.Principal], [], []),
-    'expand' : IDL.Func([IDL.Nat32, IDL.Nat32], [IDL.Nat32], []),
+    'expand' : IDL.Func(
+        [IDL.Nat32, IDL.Nat32, IDL.Vec(IDL.Nat8)],
+        [IDL.Nat32],
+        [],
+      ),
     'find' : IDL.Func(
         [IDL.Nat32, IDL.Vec(IDL.Vec(IDL.Nat8))],
         [IDL.Vec(IDL.Opt(IDL.Nat32))],
@@ -45,8 +54,16 @@ export const idlFactory = ({ IDL }) => {
     'get_pool_size' : IDL.Func([IDL.Nat32], [IDL.Nat32], ['query']),
     'get_size' : IDL.Func([IDL.Nat32], [IDL.Nat32], ['query']),
     'length' : IDL.Func([], [IDL.Nat32], ['query']),
-    'remove' : IDL.Func([IDL.Vec(IDL.Vec(IDL.Nat8))], [IDL.Nat32], []),
-    'select' : IDL.Func([IDL.Nat32, IDL.Nat32], [IDL.Nat32], []),
+    'remove' : IDL.Func(
+        [IDL.Vec(IDL.Vec(IDL.Nat8)), IDL.Vec(IDL.Nat8)],
+        [IDL.Nat32],
+        [],
+      ),
+    'select' : IDL.Func(
+        [IDL.Nat32, IDL.Nat32, IDL.Vec(IDL.Nat8)],
+        [IDL.Nat32],
+        [],
+      ),
   });
 };
 export const init = ({ IDL }) => { return [IDL.Opt(IDL.Text)]; };

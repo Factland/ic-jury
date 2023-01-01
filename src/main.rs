@@ -44,6 +44,7 @@ struct Data {
     jurors: Vec<Blob>,
     rand: Option<Blob>,
     jurors_index: u32,
+    memo: Blob,
 }
 
 #[derive(Clone, Debug, Default, CandidType, Deserialize)]
@@ -157,10 +158,11 @@ fn push_pending(data: &Data) {
 
 #[ic_cdk_macros::update(guard = "is_authorized")]
 #[candid_method]
-fn add(new_jurors: Vec<Blob>) -> u32 {
+fn add(new_jurors: Vec<Blob>, memo: Blob) -> u32 {
     let mut new_data = Data::default();
     new_data.kind = Kind::Add;
     new_data.jurors = new_jurors.clone();
+    new_data.memo = memo;
     push_pending(&new_data);
     let index = length() - 1;
     TREE.with(|t| {
@@ -192,10 +194,11 @@ fn add(new_jurors: Vec<Blob>) -> u32 {
 
 #[ic_cdk_macros::update(guard = "is_authorized")]
 #[candid_method]
-fn remove(remove_jurors: Vec<Blob>) -> u32 {
+fn remove(remove_jurors: Vec<Blob>, memo: Blob) -> u32 {
     let mut new_data = Data::default();
     new_data.kind = Kind::Remove;
     new_data.jurors = remove_jurors.clone();
+    new_data.memo = memo;
     push_pending(&new_data);
     let index = length() - 1;
     TREE.with(|t| {
@@ -260,12 +263,13 @@ fn make_jury(index: u32, count: u32, seed: Hash) -> Vec<Blob> {
 
 #[ic_cdk_macros::update(guard = "is_authorized")]
 #[candid_method]
-async fn select(index: u32, count: u32) -> u32 {
+async fn select(index: u32, count: u32, memo: Blob) -> u32 {
     let mut new_data = Data::default();
     new_data.kind = Kind::Select;
     let seed = get_rng_seed().await;
     new_data.rand = Some(seed.to_vec());
     new_data.jurors = make_jury(index, count, seed);
+    new_data.memo = memo;
     push_pending(&new_data);
     set_certificate();
     length() - 1
@@ -273,7 +277,7 @@ async fn select(index: u32, count: u32) -> u32 {
 
 #[ic_cdk_macros::update(guard = "is_authorized")]
 #[candid_method]
-fn expand(index: u32, count: u32) -> u32 {
+fn expand(index: u32, count: u32, memo: Blob) -> u32 {
     let mut new_data = Data::default();
     new_data.kind = Kind::Expand;
     let old = get_block(index);
@@ -281,6 +285,7 @@ fn expand(index: u32, count: u32) -> u32 {
     let seed: Hash = old.data.rand.unwrap().try_into().unwrap();
     let old_count = old.data.jurors.len() as u32;
     new_data.jurors = make_jury(index, old_count + count, seed)[old_count as usize..].to_vec();
+    new_data.memo = memo;
     push_pending(&new_data);
     set_certificate();
     length() - 1
