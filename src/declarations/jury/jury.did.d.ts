@@ -29,10 +29,10 @@ export interface _SERVICE {
   'get_certificate' : ActorMethod<[], [] | [Uint8Array]>,
   'get_jurors' : ActorMethod<[number], Array<Uint8Array>>,
   'get_pending' : ActorMethod<[], number>,
+  'get_pool' : ActorMethod<[number, number, number], Array<Uint8Array>>,
   'get_pool_size' : ActorMethod<[number], number>,
   'get_size' : ActorMethod<[number], number>,
   'length' : ActorMethod<[], number>,
-  'proof' : ActorMethod<[number, Uint32Array], Array<Uint8Array>>,
   'remove' : ActorMethod<[Array<Uint8Array>], number>,
   'select' : ActorMethod<[number, number], number>,
 }

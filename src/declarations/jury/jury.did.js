@@ -37,14 +37,14 @@ export const idlFactory = ({ IDL }) => {
         ['query'],
       ),
     'get_pending' : IDL.Func([], [IDL.Nat32], ['query']),
-    'get_pool_size' : IDL.Func([IDL.Nat32], [IDL.Nat32], ['query']),
-    'get_size' : IDL.Func([IDL.Nat32], [IDL.Nat32], ['query']),
-    'length' : IDL.Func([], [IDL.Nat32], ['query']),
-    'proof' : IDL.Func(
-        [IDL.Nat32, IDL.Vec(IDL.Nat32)],
+    'get_pool' : IDL.Func(
+        [IDL.Nat32, IDL.Nat32, IDL.Nat32],
         [IDL.Vec(IDL.Vec(IDL.Nat8))],
         ['query'],
       ),
+    'get_pool_size' : IDL.Func([IDL.Nat32], [IDL.Nat32], ['query']),
+    'get_size' : IDL.Func([IDL.Nat32], [IDL.Nat32], ['query']),
+    'length' : IDL.Func([], [IDL.Nat32], ['query']),
     'remove' : IDL.Func([IDL.Vec(IDL.Vec(IDL.Nat8))], [IDL.Nat32], []),
     'select' : IDL.Func([IDL.Nat32, IDL.Nat32], [IDL.Nat32], []),
   });

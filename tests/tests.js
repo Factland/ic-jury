@@ -52,8 +52,7 @@ function uint8ArrayToString(a) {
 function dataToHex(data) {
   let d = { ...data };
   d.jurors = data.jurors.map(uint8ArrayToString);
-  console.log(d);
-  d
+  return d;
 }
 
 function blockToHex(block) {
@@ -84,6 +83,10 @@ let secret_key = new Uint8Array(privateKeyDER.slice(7, 7+32));
 const identity = Secp256k1KeyIdentity.fromSecretKey(secret_key);
 const principal = identity.getPrincipal().toText();
 
+// Reinstall to clear all data.
+console.log('reinstalling jury canister');
+let reinstall_cmd = '(cd ..;dfx deploy --mode=reinstall -y jury)';
+console.log('exec:', reinstall_cmd, await exec(reinstall_cmd));
 // Authorize this identity.
 console.log('authorizing principal', principal);
 let authorize_cmd = 'dfx canister call  jury authorize \'(principal "' + principal + '")\'';
@@ -133,12 +136,40 @@ console.log('get pending', await actor.get_pending());
 let block = await actor.get_block(index);
 console.log('get block from index', index, blockToHex(block));
 
+let pool_size = await actor.get_pool_size(index)
+console.log("pool size at index", index, pool_size);
+let pool = await actor.get_pool(index, 0, pool_size);
+console.log("pool at index", index, pool.map(uint8ArrayToString));
+
+index = await actor.select(index, 1);
+let jurors = await actor.get_jurors(index);
+console.log("select 1", jurors.map(uint8ArrayToString));
+
+index = await actor.expand(index, 2);
+jurors = await actor.get_jurors(index);
+console.log("expand 2", jurors.map(uint8ArrayToString));
+
+index = await actor.select(index, 2);
+jurors = await actor.get_jurors(index);
+console.log("select 2", jurors.map(uint8ArrayToString));
+
+index = await actor.select(index, 3);
+jurors = await actor.get_jurors(index);
+console.log("select 3", jurors.map(uint8ArrayToString));
+
 index = await actor.remove([juror2])
 console.log('remove block number', index);
 console.log('blockchain length', await actor.length());
 console.log('get pending', await actor.get_pending());
 block = await actor.get_block(index);
 console.log('get block from index', index, blockToHex(block));
+
+index = await actor.select(index, 1);
+jurors = await actor.get_jurors(index);
+console.log("select 1", jurors.map(uint8ArrayToString));
+index = await actor.select(index, 2);
+jurors = await actor.get_jurors(index);
+console.log("select 2", jurors.map(uint8ArrayToString));
 
 let certificate = await actor.get_certificate();
 console.log('certificate', toHex(certificate[0]));
@@ -150,11 +181,17 @@ console.log('blockchain length', await actor.length());
 let size = await actor.get_size(index - 1)
 console.log("jurors size from index", index, size);
 
-let pool_size = await actor.get_pool_size(index - 1)
-console.log("juror pool size from index", index, pool_size);
+pool_size = await actor.get_pool_size(index - 1)
+console.log("pool size at index", index, pool_size);
+
+pool = await actor.get_pool(index - 1, 0, pool_size);
+console.log("pool at index", index, pool.map(uint8ArrayToString));
 
 block = await actor.get_block(index - 1);
 console.log('get block from index', index, blockToHex(block));
+
+let found = await actor.find(index - 1, [juror1, juror2, juror3]);
+console.log('find jurors at index', index, [juror1, juror2, juror3].map(uint8ArrayToString), found[0], found[1], found[2]);
 
 console.log('dfx ping');
 let ping_output = await exec('dfx ping');

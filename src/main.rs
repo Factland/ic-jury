@@ -6,11 +6,13 @@ use ic_stable_structures::memory_manager::{MemoryId, MemoryManager, VirtualMemor
 use ic_stable_structures::{
     cell::Cell as StableCell, log::Log, DefaultMemoryImpl, StableBTreeMap, Storable,
 };
-use rand::seq::SliceRandom;
+use rand::distributions::Distribution;
+use rand::distributions::Uniform;
+use rand::Rng;
 use rand_core::SeedableRng;
 use serde::Serialize;
 use sha2::Digest;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::fmt::Debug;
 use std::{borrow::Cow, cell::RefCell};
 #[macro_use]
@@ -176,6 +178,8 @@ fn add(new_jurors: Vec<Blob>) -> u32 {
                     }
                     history.push(index);
                     t.insert(j, from_history(&history));
+                } else {
+                    // Already inserted, do nothing.
                 }
             } else {
                 t.insert(j, from_history(&vec![index]));
@@ -202,6 +206,8 @@ fn remove(remove_jurors: Vec<Blob>) -> u32 {
                 if history.len() % 2 == 1 {
                     history.push(index);
                     t.insert(j, from_history(&history));
+                } else {
+                    // Already deleted, do nothing.
                 }
             }
         }
@@ -219,7 +225,7 @@ fn collect_pool(index: u32) -> Vec<Blob> {
             let mut found = false;
             if history.len() % 2 == 1 {
                 // simple case: juror is currently active
-                if history[history.len() - 1] >= index - 1 {
+                if history[history.len() - 1] <= index {
                     pool.push(k.to_vec());
                     found = true;
                 }
@@ -243,9 +249,13 @@ fn collect_pool(index: u32) -> Vec<Blob> {
 fn make_jury(index: u32, count: u32, seed: Hash) -> Vec<Blob> {
     let mut rng = make_rng(seed);
     let pool = collect_pool(index);
-    pool.choose_multiple(&mut rng, count as usize)
-        .cloned()
-        .collect()
+    let mut result = Vec::new();
+    let sample: Vec<usize> = sample(&mut rng, count as usize, pool.len());
+    for s in sample {
+        let juror: &Blob = pool.get(s).unwrap();
+        result.push(juror.clone());
+    }
+    result
 }
 
 #[ic_cdk_macros::update(guard = "is_authorized")]
@@ -258,7 +268,7 @@ async fn select(index: u32, count: u32) -> u32 {
     new_data.jurors = make_jury(index, count, seed);
     push_pending(&new_data);
     set_certificate();
-    length()
+    length() - 1
 }
 
 #[ic_cdk_macros::update(guard = "is_authorized")]
@@ -273,7 +283,14 @@ fn expand(index: u32, count: u32) -> u32 {
     new_data.jurors = make_jury(index, old_count + count, seed)[old_count as usize..].to_vec();
     push_pending(&new_data);
     set_certificate();
-    length()
+    length() - 1
+}
+
+#[ic_cdk_macros::query]
+#[candid_method]
+fn get_pool(index: u32, start: u32, length: u32) -> Vec<Blob> {
+    let pool = collect_pool(index);
+    return pool[(start as usize)..((start + length) as usize)].to_vec();
 }
 
 #[ic_cdk_macros::query]
@@ -284,6 +301,25 @@ fn get_certificate() -> Option<Blob> {
     } else {
         ic_cdk::api::data_certificate()
     }
+}
+
+fn sample<R, IndexVec>(rng: &mut R, amount: usize, length: usize) -> IndexVec
+where
+    R: Rng + ?Sized,
+    IndexVec: From<Vec<usize>>,
+{
+    assert!(amount <= length);
+    let mut cache = HashSet::with_capacity(amount as usize);
+    let distr = Uniform::new(0, length);
+    let mut indices = Vec::with_capacity(amount as usize);
+    for _ in 0..amount {
+        let mut pos = distr.sample(rng);
+        while !cache.insert(pos) {
+            pos = distr.sample(rng);
+        }
+        indices.push(pos);
+    }
+    IndexVec::from(indices)
 }
 
 fn get_previous_hash() -> Hash {
@@ -307,10 +343,6 @@ fn build_tree(data: &Vec<Data>, previous_hash: &Hash) -> BlockTree {
         tree.insert(i.to_be_bytes().to_vec(), hash); // For lexigraphic order.
     }
     tree.insert("previous_hash".as_bytes().to_vec(), *previous_hash); // For lexigraphic order.
-    tree.insert(
-        "pool_hash".as_bytes().to_vec(),
-        TREE.with(|t| t.borrow().root_hash()),
-    );
     tree
 }
 
