@@ -3,7 +3,6 @@ type Data = record {
   kind: Kind;
   jurors: vec blob;
   rand: opt blob; // Only present for Select/Expand.
-  jurors_index: nat32; // Only used for Select/Expand.
   memo: blob;
 };
 type Block = record {

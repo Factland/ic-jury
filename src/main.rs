@@ -43,7 +43,6 @@ struct Data {
     kind: Kind,
     jurors: Vec<Blob>,
     rand: Option<Blob>,
-    jurors_index: u32,
     memo: Blob,
 }
 
