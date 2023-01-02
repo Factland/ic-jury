@@ -299,6 +299,18 @@ fn get_pool(index: u32, start: u32, length: u32) -> Vec<Blob> {
 
 #[ic_cdk_macros::query]
 #[candid_method]
+fn get_history(juror: Blob) -> Vec<u32> {
+    TREE.with(|t| {
+        if let Some(h) = t.borrow().get(juror.as_slice()) {
+            to_history(h)
+        } else {
+            Vec::new()
+        }
+    })
+}
+
+#[ic_cdk_macros::query]
+#[candid_method]
 fn get_certificate() -> Option<Blob> {
     if PENDING_DATA.with(|d| d.borrow().get().0.len()) == 0 {
         None

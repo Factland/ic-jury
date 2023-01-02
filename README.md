@@ -73,6 +73,8 @@ service jury: (opt text) -> {
   find: (index: nat32, jurors: vec blob) -> (vec opt nat32) query;
   // Returns jurors from the pool at the given log index.
   get_pool: (index: nat32, start: nat32, length: nat32) -> (vec blob) query;
+  // Returns the ranges where the juror was eligible [start, end)* where the last range may not end.
+  get_history: (juror: blob) -> (vec nat32) query;
 
   //
   // Manage the set of Principals allowed to stage and commit Blocks.
