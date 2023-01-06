@@ -7,7 +7,6 @@ export const idlFactory = ({ IDL }) => {
   });
   const Data = IDL.Record({
     'jurors' : IDL.Vec(IDL.Vec(IDL.Nat8)),
-    'jurors_index' : IDL.Nat32,
     'kind' : Kind,
     'memo' : IDL.Vec(IDL.Nat8),
     'rand' : IDL.Opt(IDL.Vec(IDL.Nat8)),
@@ -40,6 +39,11 @@ export const idlFactory = ({ IDL }) => {
     'get_authorized' : IDL.Func([], [IDL.Vec(IDL.Principal)], ['query']),
     'get_block' : IDL.Func([IDL.Nat32], [Block], ['query']),
     'get_certificate' : IDL.Func([], [IDL.Opt(IDL.Vec(IDL.Nat8))], ['query']),
+    'get_history' : IDL.Func(
+        [IDL.Vec(IDL.Nat8)],
+        [IDL.Vec(IDL.Nat32)],
+        ['query'],
+      ),
     'get_jurors' : IDL.Func(
         [IDL.Nat32],
         [IDL.Vec(IDL.Vec(IDL.Nat8))],

@@ -9,7 +9,6 @@ export interface Block {
 }
 export interface Data {
   'jurors' : Array<Uint8Array>,
-  'jurors_index' : number,
   'kind' : Kind,
   'memo' : Uint8Array,
   'rand' : [] | [Uint8Array],
@@ -28,6 +27,7 @@ export interface _SERVICE {
   'get_authorized' : ActorMethod<[], Array<Principal>>,
   'get_block' : ActorMethod<[number], Block>,
   'get_certificate' : ActorMethod<[], [] | [Uint8Array]>,
+  'get_history' : ActorMethod<[Uint8Array], Uint32Array>,
   'get_jurors' : ActorMethod<[number], Array<Uint8Array>>,
   'get_pending' : ActorMethod<[], number>,
   'get_pool' : ActorMethod<[number, number, number], Array<Uint8Array>>,
