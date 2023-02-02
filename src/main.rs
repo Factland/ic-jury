@@ -291,14 +291,14 @@ fn expand(index: u32, count: u32, memo: Blob) -> u32 {
 }
 
 #[ic_cdk_macros::query]
-#[candid_method]
+#[candid_method(query)]
 fn get_pool(index: u32, start: u32, length: u32) -> Vec<Blob> {
     let pool = collect_pool(index);
     return pool[(start as usize)..((start + length) as usize)].to_vec();
 }
 
 #[ic_cdk_macros::query]
-#[candid_method]
+#[candid_method(query)]
 fn get_history(juror: Blob) -> Vec<u32> {
     TREE.with(|t| {
         if let Some(h) = t.borrow().get(juror.as_slice()) {
@@ -310,7 +310,7 @@ fn get_history(juror: Blob) -> Vec<u32> {
 }
 
 #[ic_cdk_macros::query]
-#[candid_method]
+#[candid_method(query)]
 fn get_certificate() -> Option<Blob> {
     if PENDING_DATA.with(|d| d.borrow().get().0.len()) == 0 {
         None
@@ -409,31 +409,31 @@ fn commit(certificate: Blob) -> Option<u32> {
 }
 
 #[ic_cdk_macros::query]
-#[candid_method]
+#[candid_method(query)]
 fn get_size(index: u32) -> u32 {
     get_block(index).data.jurors.len() as u32
 }
 
 #[ic_cdk_macros::query]
-#[candid_method]
+#[candid_method(query)]
 fn get_pool_size(index: u32) -> u32 {
     collect_pool(index).len() as u32
 }
 
 #[ic_cdk_macros::query]
-#[candid_method]
+#[candid_method(query)]
 fn length() -> u32 {
     (LOG.with(|l| l.borrow().len()) + PENDING_DATA.with(|d| d.borrow().get().0.len())) as u32
 }
 
 #[ic_cdk_macros::query]
-#[candid_method]
+#[candid_method(query)]
 fn get_pending() -> u32 {
     PENDING_DATA.with(|d| d.borrow().get().0.len()) as u32
 }
 
 #[ic_cdk_macros::query]
-#[candid_method]
+#[candid_method(query)]
 fn get_block(index: u32) -> Block {
     LOG.with(|l| {
         let committed = l.borrow().len() as u32;
@@ -454,13 +454,13 @@ fn get_block(index: u32) -> Block {
 }
 
 #[ic_cdk_macros::query]
-#[candid_method]
+#[candid_method(query)]
 fn get_jurors(index: u32) -> Vec<Blob> {
     get_block(index).data.jurors
 }
 
 #[ic_cdk_macros::query]
-#[candid_method]
+#[candid_method(query)]
 fn find(index: u32, jurors: Vec<Blob>) -> Vec<Option<u32>> {
     let pool = collect_pool(index);
     let mut m: HashMap<Blob, u32> = HashMap::new();
@@ -478,7 +478,7 @@ fn find(index: u32, jurors: Vec<Blob>) -> Vec<Option<u32>> {
 }
 
 #[ic_cdk_macros::query]
-#[candid_method]
+#[candid_method(query)]
 fn get_authorized() -> Vec<Principal> {
     let mut authorized = Vec::new();
     AUTH.with(|a| {
