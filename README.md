@@ -101,6 +101,17 @@ The canister smart contract stores all persistent data in stable memory.  There 
 
 The algorithm used for jury selection (sample with rejection) has poor perfomance for pool size P and sample size S, when S is large and S nearly P (e.g. more than P/2).  This situation should be avoided.  The expectation is that P will generally be more than twice as large as S at which point the cost is essentially linear in S.
 
+## Privacy
+  
+The jury pool identities are blinded.
+In order to protect the identity of jurors, a blinded per jury identity is used <COMPLETE HERE>.
+The controlling entity can provide a signed testimonial that the individual has the blinded jury id without disclosing their user id or blinded jury pool id.
+
+## Viewing and Verifying 
+
+Scripts are provided for these.
+Verify your vote by comparing your per-jury id to the per-jury id provided by the controlling entity.
+
 ## Usage
 
 ### Backup and Remove Old Blocks

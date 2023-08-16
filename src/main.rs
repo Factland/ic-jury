@@ -1,10 +1,10 @@
 use candid::{CandidType, Decode, Deserialize, Encode, Principal};
 use hash_tree::{HashTree, LookupResult};
-use ic_cdk::export::candid::candid_method;
 use ic_certified_map::{AsHashTree, Hash, RbTree};
 use ic_stable_structures::memory_manager::{MemoryId, MemoryManager, VirtualMemory};
 use ic_stable_structures::{
-    cell::Cell as StableCell, log::Log, DefaultMemoryImpl, StableBTreeMap, Storable,
+    cell::Cell as StableCell, log::Log, BoundedStorable, DefaultMemoryImpl, StableBTreeMap,
+    Storable,
 };
 use rand::distributions::Distribution;
 use rand::distributions::Uniform;
@@ -26,7 +26,6 @@ type History = Vec<u32>;
 type PoolTree = RbTree<Blob, Blob>;
 type BlockTree = RbTree<Blob, Hash>;
 
-const MAX_KEY_SIZE: u32 = 32;
 const MAX_HISTORY: usize = 8;
 
 #[derive(Clone, Debug, Default, CandidType, Deserialize, FromPrimitive)]
@@ -83,7 +82,7 @@ impl Storable for StoreHash {
         Cow::Owned(Encode!(self).unwrap())
     }
 
-    fn from_bytes(bytes: Vec<u8>) -> Self {
+    fn from_bytes(bytes: Cow<'_, [u8]>) -> Self {
         Decode!(&bytes, Self).unwrap()
     }
 }
@@ -93,26 +92,41 @@ impl Storable for StoreData {
         Cow::Owned(Encode!(self).unwrap())
     }
 
-    fn from_bytes(bytes: Vec<u8>) -> Self {
+    fn from_bytes(bytes: Cow<'_, [u8]>) -> Self {
         Decode!(&bytes, Self).unwrap()
     }
+}
+
+#[derive(PartialEq, Eq, PartialOrd, Ord, Clone)]
+struct PrincipalStorable(Principal);
+
+impl Storable for PrincipalStorable {
+    fn to_bytes(&self) -> std::borrow::Cow<[u8]> {
+        std::borrow::Cow::from(self.0.as_slice())
+    }
+
+    fn from_bytes(bytes: std::borrow::Cow<[u8]>) -> Self {
+        Self(Principal::from_slice(&bytes))
+    }
+}
+
+impl BoundedStorable for PrincipalStorable {
+    const MAX_SIZE: u32 = 29;
+    const IS_FIXED_SIZE: bool = false;
 }
 
 thread_local! {
     static MEMORY_MANAGER: RefCell<MemoryManager<DefaultMemoryImpl>> =
         RefCell::new(MemoryManager::init(DefaultMemoryImpl::default()));
-    static LOG: RefCell<Log<Memory, Memory>> = RefCell::new(
+    static LOG: RefCell<Log<Vec<u8>, Memory, Memory>> = RefCell::new(
         Log::init(
             MEMORY_MANAGER.with(|m| m.borrow().get(MemoryId::new(0))),
             MEMORY_MANAGER.with(|m| m.borrow().get(MemoryId::new(1))),
             ).unwrap()
         );
-    static AUTH: RefCell<StableBTreeMap<Memory, Blob, u32>> = RefCell::new(
-        StableBTreeMap::init_with_sizes(
-            MEMORY_MANAGER.with(|m| m.borrow().get(MemoryId::new(3))),
-            MAX_KEY_SIZE,
-            4
-            )
+    static AUTH: RefCell<StableBTreeMap<PrincipalStorable, u32, Memory>> = RefCell::new(
+        StableBTreeMap::init(
+            MEMORY_MANAGER.with(|m| m.borrow().get(MemoryId::new(3))))
         );
     static PENDING_DATA: RefCell<StableCell<StoreData, Memory>> = RefCell::new(StableCell::init(
             MEMORY_MANAGER.with(|m| m.borrow().get(MemoryId::new(4))),
@@ -156,7 +170,6 @@ fn push_pending(data: &Data) {
 }
 
 #[ic_cdk_macros::update(guard = "is_authorized")]
-#[candid_method]
 fn add(new_jurors: Vec<Blob>, memo: Blob) -> u32 {
     let mut new_data = Data::default();
     new_data.kind = Kind::Add;
@@ -192,7 +205,6 @@ fn add(new_jurors: Vec<Blob>, memo: Blob) -> u32 {
 }
 
 #[ic_cdk_macros::update(guard = "is_authorized")]
-#[candid_method]
 fn remove(remove_jurors: Vec<Blob>, memo: Blob) -> u32 {
     let mut new_data = Data::default();
     new_data.kind = Kind::Remove;
@@ -261,7 +273,6 @@ fn make_jury(index: u32, count: u32, seed: Hash) -> Vec<Blob> {
 }
 
 #[ic_cdk_macros::update(guard = "is_authorized")]
-#[candid_method]
 async fn select(index: u32, count: u32, memo: Blob) -> u32 {
     let mut new_data = Data::default();
     new_data.kind = Kind::Select;
@@ -275,7 +286,6 @@ async fn select(index: u32, count: u32, memo: Blob) -> u32 {
 }
 
 #[ic_cdk_macros::update(guard = "is_authorized")]
-#[candid_method]
 fn expand(index: u32, count: u32, memo: Blob) -> u32 {
     let mut new_data = Data::default();
     new_data.kind = Kind::Expand;
@@ -291,14 +301,12 @@ fn expand(index: u32, count: u32, memo: Blob) -> u32 {
 }
 
 #[ic_cdk_macros::query]
-#[candid_method(query)]
 fn get_pool(index: u32, start: u32, length: u32) -> Vec<Blob> {
     let pool = collect_pool(index);
     return pool[(start as usize)..((start + length) as usize)].to_vec();
 }
 
 #[ic_cdk_macros::query]
-#[candid_method(query)]
 fn get_history(juror: Blob) -> Vec<u32> {
     TREE.with(|t| {
         if let Some(h) = t.borrow().get(juror.as_slice()) {
@@ -310,7 +318,6 @@ fn get_history(juror: Blob) -> Vec<u32> {
 }
 
 #[ic_cdk_macros::query]
-#[candid_method(query)]
 fn get_certificate() -> Option<Blob> {
     if PENDING_DATA.with(|d| d.borrow().get().0.len()) == 0 {
         None
@@ -363,7 +370,6 @@ fn build_tree(data: &Vec<Data>, previous_hash: &Hash) -> BlockTree {
 }
 
 #[ic_cdk_macros::update(guard = "is_authorized")]
-#[candid_method]
 fn commit(certificate: Blob) -> Option<u32> {
     let data = PENDING_DATA.with(|d| d.borrow().get().0.clone());
     if data.len() == 0 {
@@ -409,36 +415,31 @@ fn commit(certificate: Blob) -> Option<u32> {
 }
 
 #[ic_cdk_macros::query]
-#[candid_method(query)]
 fn get_size(index: u32) -> u32 {
     get_block(index).data.jurors.len() as u32
 }
 
 #[ic_cdk_macros::query]
-#[candid_method(query)]
 fn get_pool_size(index: u32) -> u32 {
     collect_pool(index).len() as u32
 }
 
 #[ic_cdk_macros::query]
-#[candid_method(query)]
 fn length() -> u32 {
-    (LOG.with(|l| l.borrow().len()) + PENDING_DATA.with(|d| d.borrow().get().0.len())) as u32
+    (LOG.with(|l| l.borrow().len()) + PENDING_DATA.with(|d| d.borrow().get().0.len() as u64)) as u32
 }
 
 #[ic_cdk_macros::query]
-#[candid_method(query)]
 fn get_pending() -> u32 {
     PENDING_DATA.with(|d| d.borrow().get().0.len()) as u32
 }
 
 #[ic_cdk_macros::query]
-#[candid_method(query)]
 fn get_block(index: u32) -> Block {
     LOG.with(|l| {
         let committed = l.borrow().len() as u32;
         if index < committed {
-            return candid::decode_one(&l.borrow().get(index as usize).unwrap()).unwrap();
+            return candid::decode_one(&l.borrow().get(index as u64).unwrap()).unwrap();
         }
         let mut b = Block::default();
         b.data = PENDING_DATA.with(|d| {
@@ -454,13 +455,11 @@ fn get_block(index: u32) -> Block {
 }
 
 #[ic_cdk_macros::query]
-#[candid_method(query)]
 fn get_jurors(index: u32) -> Vec<Blob> {
     get_block(index).data.jurors
 }
 
 #[ic_cdk_macros::query]
-#[candid_method(query)]
 fn find(index: u32, jurors: Vec<Blob>) -> Vec<Option<u32>> {
     let pool = collect_pool(index);
     let mut m: HashMap<Blob, u32> = HashMap::new();
@@ -478,50 +477,41 @@ fn find(index: u32, jurors: Vec<Blob>) -> Vec<Option<u32>> {
 }
 
 #[ic_cdk_macros::query]
-#[candid_method(query)]
 fn get_authorized() -> Vec<Principal> {
     let mut authorized = Vec::new();
     AUTH.with(|a| {
         for (k, _v) in a.borrow().iter() {
-            authorized.push(Principal::from_slice(&k));
+            authorized.push(k.0);
         }
     });
     authorized
 }
 
 #[ic_cdk_macros::update(guard = "is_authorized")]
-#[candid_method]
 fn authorize(principal: Principal) {
     let value = Auth::Admin;
     AUTH.with(|a| {
         a.borrow_mut()
-            .insert(principal.as_slice().to_vec(), value as u32)
-            .unwrap();
+            .insert(PrincipalStorable(principal), value as u32);
     });
 }
 
 #[ic_cdk_macros::update(guard = "is_authorized")]
-#[candid_method]
 fn deauthorize(principal: Principal) {
     AUTH.with(|a| {
         a.borrow_mut()
-            .remove(&principal.as_slice().to_vec())
-            .unwrap();
-    });
-}
-
-fn authorize_principal(principal: &Principal) {
-    AUTH.with(|a| {
-        a.borrow_mut()
-            .insert(principal.as_slice().to_vec(), Auth::Admin as u32)
+            .remove(&PrincipalStorable(principal))
             .unwrap();
     });
 }
 
 fn is_authorized() -> Result<(), String> {
+    if ic_cdk::api::is_controller(&ic_cdk::caller()) {
+        return Ok(());
+    }
     AUTH.with(|a| {
         if a.borrow()
-            .contains_key(&ic_cdk::caller().as_slice().to_vec())
+            .contains_key(&PrincipalStorable(ic_cdk::caller()))
         {
             Ok(())
         } else {
@@ -551,7 +541,6 @@ fn make_rng(seed: Hash) -> rand_chacha::ChaCha20Rng {
 
 #[ic_cdk_macros::init]
 fn canister_init(previous_hash: Option<String>) {
-    authorize_principal(&ic_cdk::caller());
     if let Some(previous_hash) = previous_hash {
         if let Ok(previous_hash) = hex::decode(&previous_hash) {
             if previous_hash.len() == 32 {
@@ -570,7 +559,7 @@ fn post_upgrade() {
     // Reload state.
 }
 
-ic_cdk::export::candid::export_service!();
+candid::export_service!();
 
 #[ic_cdk_macros::query(name = "__get_candid_interface_tmp_hack")]
 fn export_candid() -> String {
