@@ -4,7 +4,7 @@ import crypto from 'crypto';
 import sha256 from "sha256";
 import { lebDecode, PipeArrayBuffer } from "@dfinity/candid";
 import { Principal } from '@dfinity/principal';
-import { Secp256k1PublicKey, Secp256k1KeyIdentity } from '@dfinity/identity';
+import { Secp256k1KeyIdentity } from '@dfinity/identity-secp256k1';
 import { Actor, Cbor, Certificate, HttpAgent, lookup_path, reconstruct, hashTreeToString } from '@dfinity/agent';
 import { idlFactory } from '../src/declarations/jury/jury.did.js';
 import exec from 'await-exec';
@@ -93,6 +93,10 @@ console.log('authorizing principal', principal);
 let authorize_cmd = 'dfx canister call  jury authorize \'(principal "' + principal + '")\'';
 console.log('exec:', authorize_cmd, await exec(authorize_cmd));
 
+let webserver_port = await exec('dfx info webserver-port');
+webserver_port = webserver_port.stdout.trim();
+console.log('webserver port', webserver_port);
+
 // Get canister id.
 let localCanisters;
 try {
@@ -102,24 +106,22 @@ try {
 }
  
 const canisterId = localCanisters['jury']['local'];
-const url = 'http://' + canisterId + '.localhost:8080';
+const url = 'http://' + canisterId + '.localhost:' + webserver_port;
+const base_url = 'http://localhost:' + webserver_port;
 
-export const createActor = (idlFactory, canisterId, options) => {
-  let agentOptions = options ? {...options.agentOptions} : {};
-  const agent = new HttpAgent(agentOptions);
-	agent.fetchRootKey().catch(err => {
-		console.warn('Unable to fetch root key. Check to ensure that your local replica is running');
-		console.error(err);
-	});
-  return Actor.createActor(idlFactory, {
-    agent,
-    canisterId,
-    ...(options ? options.actorOptions : {}),
-  });
+
+export const createActor = async (idlFactory, canisterId, options) => {
+    const agent = new HttpAgent({ ...options?.agentOptions });
+    await agent.fetchRootKey();
+     return Actor.createActor(idlFactory, {
+       agent,
+       canisterId,
+       ...options?.actorOptions,
+     });
 };
 
 // Now for the actual test
-let actor = createActor(idlFactory, canisterId, { agentOptions: { host: url, identity }});
+let actor = await createActor(idlFactory, canisterId, { agentOptions: { host: base_url, identity }});
 
 console.log('blockchain length', await actor.length());
 

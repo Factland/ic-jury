@@ -139,3 +139,8 @@ In some use cases it may be desirable to backup and remove old blocks from the c
 * dfx start --background
 * dfx deploy
 * make test
+
+### Node Version
+
+There is an issue with node 19+ where keepalive interacts badly with agent-js.
+Consequently please use node 18 for running tests.
