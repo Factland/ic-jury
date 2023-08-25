@@ -170,6 +170,7 @@ fn push_pending(data: &Data) {
 }
 
 #[ic_cdk_macros::update(guard = "is_authorized")]
+#[candid::candid_method]
 fn add(new_jurors: Vec<Blob>, memo: Blob) -> u32 {
     let mut new_data = Data::default();
     new_data.kind = Kind::Add;
@@ -205,6 +206,7 @@ fn add(new_jurors: Vec<Blob>, memo: Blob) -> u32 {
 }
 
 #[ic_cdk_macros::update(guard = "is_authorized")]
+#[candid::candid_method]
 fn remove(remove_jurors: Vec<Blob>, memo: Blob) -> u32 {
     let mut new_data = Data::default();
     new_data.kind = Kind::Remove;
@@ -273,6 +275,7 @@ fn make_jury(index: u32, count: u32, seed: Hash) -> Vec<Blob> {
 }
 
 #[ic_cdk_macros::update(guard = "is_authorized")]
+#[candid::candid_method]
 async fn select(index: u32, count: u32, memo: Blob) -> u32 {
     let mut new_data = Data::default();
     new_data.kind = Kind::Select;
@@ -286,6 +289,7 @@ async fn select(index: u32, count: u32, memo: Blob) -> u32 {
 }
 
 #[ic_cdk_macros::update(guard = "is_authorized")]
+#[candid::candid_method]
 fn expand(index: u32, count: u32, memo: Blob) -> u32 {
     let mut new_data = Data::default();
     new_data.kind = Kind::Expand;
@@ -301,12 +305,14 @@ fn expand(index: u32, count: u32, memo: Blob) -> u32 {
 }
 
 #[ic_cdk_macros::query]
+#[candid::candid_method]
 fn get_pool(index: u32, start: u32, length: u32) -> Vec<Blob> {
     let pool = collect_pool(index);
     return pool[(start as usize)..((start + length) as usize)].to_vec();
 }
 
 #[ic_cdk_macros::query]
+#[candid::candid_method]
 fn get_history(juror: Blob) -> Vec<u32> {
     TREE.with(|t| {
         if let Some(h) = t.borrow().get(juror.as_slice()) {
@@ -318,6 +324,7 @@ fn get_history(juror: Blob) -> Vec<u32> {
 }
 
 #[ic_cdk_macros::query]
+#[candid::candid_method]
 fn get_certificate() -> Option<Blob> {
     if PENDING_DATA.with(|d| d.borrow().get().0.len()) == 0 {
         None
@@ -370,6 +377,7 @@ fn build_tree(data: &Vec<Data>, previous_hash: &Hash) -> BlockTree {
 }
 
 #[ic_cdk_macros::update(guard = "is_authorized")]
+#[candid::candid_method]
 fn commit(certificate: Blob) -> Option<u32> {
     let data = PENDING_DATA.with(|d| d.borrow().get().0.clone());
     if data.len() == 0 {
@@ -415,26 +423,31 @@ fn commit(certificate: Blob) -> Option<u32> {
 }
 
 #[ic_cdk_macros::query]
+#[candid::candid_method]
 fn get_size(index: u32) -> u32 {
     get_block(index).data.jurors.len() as u32
 }
 
 #[ic_cdk_macros::query]
+#[candid::candid_method]
 fn get_pool_size(index: u32) -> u32 {
     collect_pool(index).len() as u32
 }
 
 #[ic_cdk_macros::query]
+#[candid::candid_method]
 fn length() -> u32 {
     (LOG.with(|l| l.borrow().len()) + PENDING_DATA.with(|d| d.borrow().get().0.len() as u64)) as u32
 }
 
 #[ic_cdk_macros::query]
+#[candid::candid_method]
 fn get_pending() -> u32 {
     PENDING_DATA.with(|d| d.borrow().get().0.len()) as u32
 }
 
 #[ic_cdk_macros::query]
+#[candid::candid_method]
 fn get_block(index: u32) -> Block {
     LOG.with(|l| {
         let committed = l.borrow().len() as u32;
@@ -455,11 +468,13 @@ fn get_block(index: u32) -> Block {
 }
 
 #[ic_cdk_macros::query]
+#[candid::candid_method]
 fn get_jurors(index: u32) -> Vec<Blob> {
     get_block(index).data.jurors
 }
 
 #[ic_cdk_macros::query]
+#[candid::candid_method]
 fn find(index: u32, jurors: Vec<Blob>) -> Vec<Option<u32>> {
     let pool = collect_pool(index);
     let mut m: HashMap<Blob, u32> = HashMap::new();
@@ -477,6 +492,7 @@ fn find(index: u32, jurors: Vec<Blob>) -> Vec<Option<u32>> {
 }
 
 #[ic_cdk_macros::query]
+#[candid::candid_method]
 fn get_authorized() -> Vec<Principal> {
     let mut authorized = Vec::new();
     AUTH.with(|a| {
@@ -488,6 +504,7 @@ fn get_authorized() -> Vec<Principal> {
 }
 
 #[ic_cdk_macros::update(guard = "is_authorized")]
+#[candid::candid_method]
 fn authorize(principal: Principal) {
     let value = Auth::Admin;
     AUTH.with(|a| {
@@ -497,6 +514,7 @@ fn authorize(principal: Principal) {
 }
 
 #[ic_cdk_macros::update(guard = "is_authorized")]
+#[candid::candid_method]
 fn deauthorize(principal: Principal) {
     AUTH.with(|a| {
         a.borrow_mut()
@@ -540,6 +558,7 @@ fn make_rng(seed: Hash) -> rand_chacha::ChaCha20Rng {
 }
 
 #[ic_cdk_macros::init]
+#[candid::candid_method]
 fn canister_init(previous_hash: Option<String>) {
     if let Some(previous_hash) = previous_hash {
         if let Ok(previous_hash) = hex::decode(&previous_hash) {
@@ -555,6 +574,7 @@ fn canister_init(previous_hash: Option<String>) {
 }
 
 #[ic_cdk_macros::post_upgrade]
+#[candid::candid_method]
 fn post_upgrade() {
     // Reload state.
 }
@@ -568,7 +588,7 @@ fn export_candid() -> String {
 
 #[cfg(not(target_arch = "wasm32"))]
 fn main() {
-    println!("{}", export_candid());
+    println!("{}", __export_service());
 }
 
 #[cfg(target_arch = "wasm32")]

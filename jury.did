@@ -8,7 +8,7 @@ type Data = record {
 type Block = record {
   // Certificate is signed by the NNS root key and contains the root of tree.
   certificate: blob;
-  // Under b"jury_block" is sha256 of a map from block number to sha245(data).
+  // Under b"jury_block" is sha256 of a map from block number to sha256(data).
   tree: blob;
   data: Data;
   // Previous commit hash (not previous block hash).
